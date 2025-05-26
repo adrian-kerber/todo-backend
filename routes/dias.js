@@ -7,7 +7,14 @@ const router = express.Router();
 router.get("/", async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM dias ORDER BY data DESC");
-    res.json(rows);
+    // Sempre retorna data como YYYY-MM-DDT12:00:00Z
+    const ajustados = rows.map(dia => ({
+      ...dia,
+      data: dia.data instanceof Date
+        ? `${dia.data.toISOString().slice(0, 10)}T12:00:00Z`
+        : `${dia.data.slice(0, 10)}T12:00:00Z`
+    }));
+    res.json(ajustados);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao buscar dias" });
@@ -20,7 +27,11 @@ router.get("/:id", async (req, res) => {
     const { id } = req.params;
     const { rows } = await pool.query("SELECT * FROM dias WHERE id = $1", [id]);
     if (rows.length === 0) return res.status(404).json({ error: "Dia não encontrado" });
-    res.json(rows[0]);
+    const dia = rows[0];
+    dia.data = dia.data instanceof Date
+      ? `${dia.data.toISOString().slice(0, 10)}T12:00:00Z`
+      : `${dia.data.slice(0, 10)}T12:00:00Z`;
+    res.json(dia);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao buscar dia" });
@@ -29,13 +40,19 @@ router.get("/:id", async (req, res) => {
 
 // Criar novo dia
 router.post("/", async (req, res) => {
-  const { data, titulo, emoji, capa_url } = req.body;
+  let { data, titulo, emoji, capa_url } = req.body;
   try {
+    // Salva só YYYY-MM-DD no banco, não o horário
     const { rows } = await pool.query(
       "INSERT INTO dias (data, titulo, emoji, capa_url) VALUES ($1, $2, $3, $4) RETURNING *",
-      [data, titulo, emoji, capa_url]
+      [data ? data.slice(0, 10) : null, titulo, emoji, capa_url]
     );
-    res.status(201).json(rows[0]);
+    // Retorna sempre com T12:00:00Z pro frontend
+    const dia = rows[0];
+    dia.data = dia.data instanceof Date
+      ? `${dia.data.toISOString().slice(0, 10)}T12:00:00Z`
+      : `${dia.data.slice(0, 10)}T12:00:00Z`;
+    res.status(201).json(dia);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao criar dia" });
@@ -45,14 +62,19 @@ router.post("/", async (req, res) => {
 // Editar dia
 router.put("/:id", async (req, res) => {
   const { id } = req.params;
-  const { data, titulo, emoji, capa_url } = req.body;
+  let { data, titulo, emoji, capa_url } = req.body;
   try {
+    // Salva só YYYY-MM-DD no banco
     const { rows } = await pool.query(
       "UPDATE dias SET data=$1, titulo=$2, emoji=$3, capa_url=$4 WHERE id=$5 RETURNING *",
-      [data, titulo, emoji, capa_url, id]
+      [data ? data.slice(0, 10) : null, titulo, emoji, capa_url, id]
     );
     if (rows.length === 0) return res.status(404).json({ error: "Dia não encontrado" });
-    res.json(rows[0]);
+    const dia = rows[0];
+    dia.data = dia.data instanceof Date
+      ? `${dia.data.toISOString().slice(0, 10)}T12:00:00Z`
+      : `${dia.data.slice(0, 10)}T12:00:00Z`;
+    res.json(dia);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao editar dia" });
